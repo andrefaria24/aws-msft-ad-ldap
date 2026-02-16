@@ -1,6 +1,7 @@
 variable "aws_region" {
-  description = "The AWS region to deploy into (e.g., eu-central-1, us-east-1)"
-  type = string
+  description = "The AWS region to deploy into"
+  type        = string
+  default     = "us-west-2"
 }
 
 variable "password" {
@@ -15,5 +16,11 @@ variable "domain_name" {
 
 variable "instance_type" {
   description = "AWS instance type"
-  default     = "t3.medium"
+  default     = "t3.large"
+  type        = string
+}
+
+variable "home_ip" {
+  description = "Home IP Address for remote access"
+  type        = string
 }

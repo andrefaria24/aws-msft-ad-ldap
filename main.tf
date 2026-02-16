@@ -1,28 +1,3 @@
-terraform {
-  required_providers {
-    http = {
-      source  = "hashicorp/http"
-      version = "~> 3.0"
-    }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-}
-
 resource "random_password" "ad_password" {
   length           = 20
   special          = true
@@ -100,23 +75,15 @@ resource "local_file" "ca_pem_file" {
   filename = "${path.module}/ca.pem"
 }
 
-data "http" "ip_check" {
-  url = "http://checkip.amazonaws.com/"
-}
+data "terraform_remote_state" "aws-demo-network" {
+  backend = "remote"
 
-data "aws_vpcs" "default_vpcs" {
-  filter {
-    name   = "isDefault"
-    values = ["true"]
+  config = {
+    organization = "acfaria-hashicorp"
+    workspaces = {
+      name = "aws-demo-network"
+    }
   }
-}
-
-data "aws_vpc" "default" {
-  id = data.aws_vpcs.default_vpcs.ids[0]
-}
-
-data "aws_availability_zones" "available" {
-  state = "available"
 }
 
 data "aws_ami" "windows_2022" {
@@ -135,24 +102,17 @@ data "aws_ami" "windows_2022" {
 }
 
 locals {
-  dc_components = split(".", var.domain_name)
-  dc_formatted  = join(",", [for c in local.dc_components : "dc=${c}"])
-  random_cidr = cidrsubnet(data.aws_vpc.default.cidr_block, 8, random_integer.subnet_octet.result)
+  dc_components  = split(".", var.domain_name)
+  dc_formatted   = join(",", [for c in local.dc_components : "dc=${c}"])
   final_password = var.password != "" ? var.password : random_password.ad_password.result
-}
-
-resource "aws_subnet" "new_subnet" {
-  vpc_id            = data.aws_vpcs.default_vpcs.ids[0]
-  cidr_block        = local.random_cidr
-  availability_zone = data.aws_availability_zones.available.names[0]
 }
 
 resource "aws_instance" "windows_server" {
   ami           = data.aws_ami.windows_2022.id
   instance_type = var.instance_type
-  
+
   vpc_security_group_ids = ["${aws_security_group.windows_server.id}"]
-  subnet_id              = aws_subnet.new_subnet.id
+  subnet_id              = data.terraform_remote_state.aws-demo-network.outputs.pub_subnet_ids[0]
 
   user_data = <<-EOF
     <powershell>
@@ -292,7 +252,7 @@ SeRemoteInteractiveLogonRight = *S-1-5-32-544,*S-1-5-32-555
   EOF
 
   tags = {
-    Name = "ldapserver"
+    Name = "${var.domain_name}-dc"
   }
 }
 
@@ -302,28 +262,29 @@ resource "aws_eip_association" "eip_assoc" {
 }
 
 resource "aws_security_group" "windows_server" {
-  name        = "windows-server-sg"
-  description = "Security group for Windows Server"
+  name        = "windows-domain-controller-sg"
+  description = "Security group for Windows Domain Controller"
+  vpc_id      = data.terraform_remote_state.aws-demo-network.outputs.vpc_id
 
   ingress {
     from_port   = 3389
     to_port     = 3389
     protocol    = "tcp"
-    cidr_blocks = ["${chomp(data.http.ip_check.response_body)}/32"]
+    cidr_blocks = ["${var.home_ip}/32"]
   }
 
   ingress {
     from_port   = 389
     to_port     = 389
     protocol    = "tcp"
-    cidr_blocks = ["${chomp(data.http.ip_check.response_body)}/32"]
+    cidr_blocks = ["${var.home_ip}/32"]
   }
 
   ingress {
     from_port   = 636
     to_port     = 636
     protocol    = "tcp"
-    cidr_blocks = ["${chomp(data.http.ip_check.response_body)}/32"]
+    cidr_blocks = ["${var.home_ip}/32"]
   }
 
   egress {
@@ -332,44 +293,4 @@ resource "aws_security_group" "windows_server" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-output "Deployment_Status" {
-  value = <<-EOF
-    ================================================================
-    DEPLOYMENT STARTED SUCCESSFULLY
-    ================================================================
-    Server IP:     ${aws_eip.server_ip.public_ip}
-    Domain:        ${var.domain_name}
-    Subnet CIDR:   ${local.random_cidr}
-    Username:      Administrator
-    Password:      ${nonsensitive(local.final_password)}
-    CA Cert:       Saved to 'ca.pem'
-    
-    PLEASE WAIT ~10-15 MINUTES FOR INSTALLATION TO COMPLETE.
-
-    --- CONNECTION COMMANDS ---
-
-    1. STRICT VALIDATION (Use CA File):
-    LDAPTLS_CA_CERT=ca.pem ldapsearch \
-      -vvv -x \
-      -H ldaps://${aws_eip.server_ip.public_ip}:636 \
-      -D "cn=Administrator,cn=Users,${local.dc_formatted}" \
-      -w "${nonsensitive(local.final_password)}" \
-      -b "${local.dc_formatted}" \
-      -s sub
-
-    2. INSECURE VALIDATION (Ignore CA):
-    LDAPTLS_REQCERT=never ldapsearch \
-      -vvv -x \
-      -H ldaps://${aws_eip.server_ip.public_ip}:636 \
-      -D "cn=Administrator,cn=Users,${local.dc_formatted}" \
-      -w "${nonsensitive(local.final_password)}" \
-      -b "${local.dc_formatted}" \
-      -s sub
-
-    3. MACOS FIX (Import CA to System Keychain):
-    sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.pem
-    ================================================================
-  EOF
 }

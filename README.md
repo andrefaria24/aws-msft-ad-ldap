@@ -19,10 +19,10 @@ This Terraform project deploys a Windows server in AWS and automatically install
 ### Check
 - Create a `terraform.tfvars` and set the variables to match your environment.
 ```
-aws_region ="us-east-1"
+aws_region ="us-west-2"
 password = "" // Only set a value if you don't want a randomly generated password for the domain controller, otherwise the password set here will be used. Make sure it conforms to Microsoft Complexity Requirements.
 domain_name = "adldap.lab"
-instance_type = "t3.medium"
+instance_type = "t3.large"
 ```
 
 ### Deploy
@@ -32,7 +32,3 @@ instance_type = "t3.medium"
 
 ### Destroy
 `terraform destroy`
-
-
-
-
