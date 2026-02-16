@@ -28,7 +28,31 @@ instance_type = "t3.large"
 ### Deploy
 - `terraform apply`
 - It takes around 10 - 15 minutes for the deployment to complete.
-- Once complete, RDP connections to the EC2 instance is possible as well as sending LDAP and LDAPS queries.
+- Once complete, RDP connections to the EC2 instance **are** possible, as well as sending LDAP and LDAPS queries.
+
+### Connection Commands
+
+The following examples demonstrate how to connect to the LDAPS endpoint. Replace the Terraform interpolation syntax with actual values from your `terraform output`.
+
+#### STRICT VALIDATION (Recommended - Uses CA Certificate)
+This method validates the server's SSL certificate against the CA certificate file for secure connections:
+          LDAPTLS_CA_CERT=ca.pem ldapsearch \
+          -vvv -x \
+          -H ldaps://${aws_eip.server_ip.public_ip}:636 \
+          -D "cn=Administrator,cn=Users,${local.dc_formatted}" \
+          -w "${nonsensitive(local.final_password)}" \
+          -b "${local.dc_formatted}" \
+          -s sub
+
+#### INSECURE VALIDATION (Not Recommended - Ignores CA Certificate)
+This method bypasses SSL certificate validation. **Use only for testing purposes:**
+          LDAPTLS_REQCERT=never ldapsearch \
+          -vvv -x \
+          -H ldaps://${aws_eip.server_ip.public_ip}:636 \
+          -D "cn=Administrator,cn=Users,${local.dc_formatted}" \
+          -w "${nonsensitive(local.final_password)}" \
+          -b "${local.dc_formatted}" \
+          -s sub
 
 ### Destroy
 `terraform destroy`
