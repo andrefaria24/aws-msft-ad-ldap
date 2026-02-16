@@ -5,7 +5,7 @@ output "Deployment_Status" {
     ================================================================
     Server IP:     ${aws_eip.server_ip.public_ip}
     Domain:        ${var.domain_name}
-    Subnet CIDR:   data.terraform_remote_state.aws-demo-network.outputs.vpc_cidr
+    Subnet CIDR:   ${data.terraform_remote_state.aws-demo-network.outputs.vpc_cidr}
     Username:      Administrator
     Password:      ${nonsensitive(local.final_password)}
     CA Cert:       Saved to 'ca.pem'
