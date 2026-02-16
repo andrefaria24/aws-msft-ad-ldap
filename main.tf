@@ -10,6 +10,10 @@ resource "random_password" "ad_password" {
 
 resource "aws_eip" "server_ip" {
   domain = "vpc"
+
+  tags = {
+    "Name" = "${var.domain_name}-dc"
+  }
 }
 
 resource "random_integer" "subnet_octet" {
@@ -265,6 +269,10 @@ resource "aws_security_group" "windows_server" {
   name        = "windows-domain-controller-sg"
   description = "Security group for Windows Domain Controller"
   vpc_id      = data.terraform_remote_state.aws-demo-network.outputs.vpc_id
+
+  tags = {
+    "Name" = "windows-domain-controller"
+  }
 
   ingress {
     from_port   = 3389
